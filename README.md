@@ -29,3 +29,4 @@ npm start
 - Quick Init: 设置数独的数字(目前是写死的), 并填入所有可能的值 (即 `Set Initial State` + `Fill Numbers`)
 - Check: 检查是否可以消去数字并消去
 - Back: 恢复到上一步的状态
+- 小格里的数字按钮: 点击该数字, 即把该数字从此小格的备选答案中去掉

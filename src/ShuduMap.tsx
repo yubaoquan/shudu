@@ -447,11 +447,11 @@ export class ShuduMap extends Component<IProps, IState> {
       <>
         {table}
         <div className="operations">
-          <button onClick={ this.setInitialValue }>Set Initial State</button>
-          <button onClick={ this.fillNumbers }>Fill Numbers</button>
-          <button onClick={ this.quickInit }>Quick Init</button>
-          <button onClick={ this.onCheckClick }>Check</button>
-          <button onClick={ this.goBack }>Back</button>
+          <button className="btn" onClick={ this.setInitialValue }>Set Initial State</button>
+          <button className="btn" onClick={ this.fillNumbers }>Fill Numbers</button>
+          <button className="btn" onClick={ this.quickInit }>Quick Init</button>
+          <button className="btn" onClick={ this.onCheckClick }>Check</button>
+          <button className="btn" onClick={ this.goBack }>Back</button>
         </div>
       </>
     );
