@@ -99,7 +99,7 @@ export class ShuduMap extends Component<IProps, IState> {
     }, cb);
   }
 
-  setAsInitialState = () => {
+  setAsInitialState = (cb: any) => {
     const map = this.state.map;
     map.forEach((arr, i) => {
       arr.forEach((item, j) => {
@@ -107,13 +107,13 @@ export class ShuduMap extends Component<IProps, IState> {
         item.editable = item.values.length !== 1;
       });
     });
-    this.setState({ map });
+    this.setState({ map }, cb);
   }
 
-  setInitialValueOfLevel = (level: ShuduLevel) => {
+  setInitialValueOfLevel = (level: ShuduLevel, cb: any) => {
     const { map } = this.state;
     (setInitialValueFns as any)[level](map);
-    this.setAsInitialState();
+    this.setAsInitialState(cb);
   }
 
   fillNumbers = () => {
@@ -172,9 +172,13 @@ export class ShuduMap extends Component<IProps, IState> {
     ];
   }
 
-  setInitialValue = () => {
+  onSetInitialValueClick = () => {
+    this.setInitialValue();
+  }
+
+  setInitialValue = (cb = () => {}) => {
     this.resetGame(() => {
-      this.setInitialValueOfLevel(this.state.selectedLevel);
+      this.setInitialValueOfLevel(this.state.selectedLevel, cb);
     });
   }
 
@@ -182,8 +186,9 @@ export class ShuduMap extends Component<IProps, IState> {
    * 快速初始化数独面板, 填入预设的数字及所有可能的答案
    */
   quickInit = () => {
-    this.setInitialValue();
-    this.fillNumbers();
+    this.setInitialValue(() => {
+      this.fillNumbers();
+    });
   }
 
   /**
@@ -511,7 +516,7 @@ export class ShuduMap extends Component<IProps, IState> {
             >{ option.name }</option>
           ))}
         </select>
-        <button className="btn" onClick={ this.setInitialValue }>Set Initial State</button>
+        <button className="btn" onClick={ this.onSetInitialValueClick }>Set Initial State</button>
         <button className="btn" onClick={ this.fillNumbers }>Fill Numbers</button>
         <button className="btn" onClick={ this.quickInit }>Quick Init</button>
         <button className="btn" onClick={ this.onCheckClick }>Check</button>
