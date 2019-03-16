@@ -1,0 +1,44 @@
+.shudu-map {
+  border-collapse: collapse;
+  border: 2px solid red;
+  margin: 10px auto 10px;
+
+  tr:nth-of-type(3n + 1) {
+    border-top: 2px solid red;
+  }
+
+  td {
+    border: 1px solid #ccc;
+    width: 80px;
+    height: 80px;
+    position: relative;
+
+    &:nth-of-type(3n + 1) {
+      border-left: 2px solid red;
+    }
+
+  }
+  .is-set {
+    color: red;
+  }
+  .group-index {
+    opacity: .2;
+    color: #ccc;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    font-size: 40px;
+    font-weight: bold;
+    height: 60px;
+    line-height: 60px;
+    text-align: center;
+  }
+  .btns {
+    position: relative;
+  }
+  .number-btn {
+    cursor: pointer;
+
+  }
+}
