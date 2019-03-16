@@ -11,6 +11,11 @@ interface Item {
   group: number; // 所属九宫格
 }
 
+interface ICheckResult {
+  wrong?: boolean;
+  same?: boolean;
+}
+
 interface IState {
   map: Item[][];
   records: Item[][][];
@@ -178,7 +183,152 @@ export class ShuduMap extends Component<IProps, IState> {
   }
 
   hasSameItem = (item: Item, index: number, arr: Item[]): boolean => {
-    return (index < arr.length - 1) && (item === arr[index + 1]);
+    return (index < arr.length - 1) && isEqual(item, arr[index + 1]);
+  }
+
+  getRow(i: number): Item[] {
+    const { map } = this.state;
+    return map[i];
+  }
+
+  getCol(i: number): Item[] {
+    const { map } = this.state;
+    const result: Item[] = [];
+    map.forEach((row) => {
+      result.push(row[i]);
+    });
+    return result;
+  }
+
+  getGroup(i: number): Item[] {
+    const { map } = this.state;
+    const rowStart: number = Math.floor(i / 3) * 3;
+    const colStart: number = i % 3 * 3;
+    return [
+      map[rowStart][colStart], map[rowStart][colStart + 1], map[rowStart][colStart + 2],
+      map[rowStart + 1][colStart], map[rowStart + 1][colStart + 1], map[rowStart + 1][colStart + 2],
+      map[rowStart + 2][colStart], map[rowStart + 2][colStart + 1], map[rowStart + 2][colStart + 2],
+    ];
+
+  }
+
+  quickInit = () => {
+    this.setInitialValue();
+    this.fillNumbers();
+  }
+
+  goBack = () => {
+    const { records } = this.state;
+    records.shift();
+    if (!records.length) {
+      alert('no records');
+      return;
+    }
+    this.applyRecord(records[0]);
+  }
+
+  /**
+   * 记录当前所有填写的值
+   * 如果当前填写的值和上一次一样, 则不进行记录
+   * return: 是否是相同记录
+  */
+  recordCurrentMap = (): boolean => {
+    const { map, records } = this.state;
+    const record = cloneDeep(map);
+    if (records.length && isEqual(record, records[0])) {
+      console.info('Same record');
+      return true;
+    }
+    records.unshift(record);
+    this.setState({ records });
+    return false;
+  }
+
+  /**
+   * 重置到某个状态
+   */
+  applyRecord = (recordMap: Item[][]) => {
+    const { map } = this.state;
+    map.forEach((row, rowIndex) => {
+      row.forEach((item, colIndex) => {
+        const record = recordMap[rowIndex][colIndex];
+        item.value = record.value;
+        item.values = record.values;
+      });
+    });
+    this.setState({ map });
+  }
+
+  /**
+   * 计算下一步应该消掉那些格子的数字, 并检查处理结果
+   * wrong: 消掉数字导致结果出错
+   * same: 本轮没有发现可以消掉的数字
+   */
+  check = (): ICheckResult => {
+    const checkResult: ICheckResult = {};
+    this.findRowColExistNumbers();
+    this.findGroupExistNumbers();
+    const {
+      map,
+      existNumbersInRow,
+      existNumbersInColumn,
+      existNumbersInGroup,
+      existTwoNumbersInRow,
+      existTwoNumbersInCol,
+      existTwoNumbersInGroup,
+    } = this.state;
+
+    let wrong = false;
+    map.forEach((row, rowIndex) => {
+      row.forEach((item, colIndex) => {
+        if (item.editable && item.values.length > 1) {
+          // 先排除掉每行/每列/每九宫格中已经存在的数字
+          const rowNumbers = existNumbersInRow[rowIndex];
+          const colNumbers = existNumbersInColumn[colIndex];
+          const groupNumbers = existNumbersInGroup[item.group];
+          let values = item.values.filter((value) => {
+            return [
+              !rowNumbers.includes(value),
+              !colNumbers.includes(value),
+              !groupNumbers.includes(value),
+            ].every(v => v);
+          });
+
+          // 找出每行/每列/每九宫格中, 两个位置中含有两对相同的值, 如某行内有两个位置分别为 [1, 2], [1, 2] 则该行中其他位置的值不可能是1或2
+          const twoNumbersInRow = existTwoNumbersInRow[rowIndex];
+          const twoNumbersInCol = existTwoNumbersInCol[colIndex];
+          const twoNumbersInGroup = existTwoNumbersInGroup[item.group];
+          // 不允许元素中出现这种数字
+          const twoNumbersForbid = [...twoNumbersInRow, ...twoNumbersInCol, ...twoNumbersInGroup];
+
+          if (values.length > 2) {
+            values = values.filter(value => {
+              return !twoNumbersForbid.includes(value);
+            });
+          }
+          if (values.length === 0) {
+            wrong = true;
+          }
+          item.values = values;
+          item.value = values.join(',');
+        }
+      });
+    });
+    if (wrong) {
+      alert('wrong');
+      checkResult.wrong = true;
+    } else {
+      this.setState({ map });
+      checkResult.same = this.recordCurrentMap();
+    }
+    return checkResult;
+  }
+
+  onCheckClick = () => {
+    let checkResult = this.check();
+    while(!checkResult.wrong && !checkResult.same) {
+      checkResult = this.check();
+    }
   }
 
   /**
@@ -221,33 +371,7 @@ export class ShuduMap extends Component<IProps, IState> {
     });
   }
 
-  getRow(i: number): Item[] {
-    const { map } = this.state;
-    return map[i];
-  }
-
-  getCol(i: number): Item[] {
-    const { map } = this.state;
-    const result: Item[] = [];
-    map.forEach((row) => {
-      result.push(row[i]);
-    });
-    return result;
-  }
-
-  getGroup(i: number): Item[] {
-    const { map } = this.state;
-    const rowStart: number = Math.floor(i / 3) % 3;
-    const colStart: number = i % 3 * 3;
-    return [
-      map[rowStart][colStart], map[rowStart][colStart + 1], map[rowStart][colStart + 2],
-      map[rowStart + 1][colStart], map[rowStart + 1][colStart + 1], map[rowStart + 1][colStart + 2],
-      map[rowStart + 2][colStart], map[rowStart + 2][colStart + 1], map[rowStart + 2][colStart + 2],
-    ];
-
-  }
-
-  /**
+    /**
    * 查询每个九宫格中作为已知条件的数字
    */
   findGroupExistNumbers = () => {
@@ -261,105 +385,11 @@ export class ShuduMap extends Component<IProps, IState> {
         }
       });
     });
+    for (let i = 0; i < 9; i++) {
+      const group = this.getGroup(i);
+      existTwoNumbersInGroup[i] = this.nItemsHasNValues(group, 2);
+    }
     this.setState({ map, existNumbersInGroup });
-  }
-
-  quickInit = () => {
-    this.setInitialValue();
-    this.fillNumbers();
-  }
-
-  goBack = () => {
-    const { records } = this.state;
-    records.shift();
-    if (!records.length) {
-      alert('no records');
-      return;
-    }
-    this.applyRecord(records[0]);
-  }
-
-  /**
-   * 记录当前所有填写的值
-  */
-  recordCurrentMap = () => {
-    const { map, records } = this.state;
-    const record = cloneDeep(map);
-    records.unshift(record);
-    this.setState({ records });
-  }
-
-  /**
-   * 重置到某个状态
-   */
-  applyRecord = (recordMap: Item[][]) => {
-    const { map } = this.state;
-    map.forEach((row, rowIndex) => {
-      row.forEach((item, colIndex) => {
-        const record = recordMap[rowIndex][colIndex];
-        item.value = record.value;
-        item.values = record.values;
-      });
-    });
-    this.setState({ map });
-  }
-
-  check = () => {
-    this.findRowColExistNumbers();
-    this.findGroupExistNumbers();
-    const {
-      map,
-      existNumbersInRow,
-      existNumbersInColumn,
-      existNumbersInGroup,
-      existTwoNumbersInRow,
-      existTwoNumbersInCol,
-      existTwoNumbersInGroup,
-    } = this.state;
-    let wrong = false;
-    map.forEach((row, rowIndex) => {
-      row.forEach((item, colIndex) => {
-        if (item.editable && item.values.length > 1) {
-          // 先排除掉每行/每列/每九宫格中已经存在的数字
-          const rowNumbers = existNumbersInRow[rowIndex];
-          const colNumbers = existNumbersInColumn[colIndex];
-          const groupNumbers = existNumbersInGroup[item.group];
-          let values = item.values.filter((value) => {
-            return [
-              !rowNumbers.includes(value),
-              !colNumbers.includes(value),
-              !groupNumbers.includes(value),
-            ].every(v => v);
-          });
-
-          // 找出每行/每列/每九宫格中, 两个位置中含有两对相同的值, 如某行内有两个位置分别为 [1, 2], [1, 2] 则该行中其他位置的值不可能是1或2
-          const twoNumbersInRow = existTwoNumbersInRow[rowIndex];
-          const twoNumbersInCol = existTwoNumbersInCol[colIndex];
-          const twoNumbersInGroup = existTwoNumbersInGroup[item.group];
-
-          if (values.length > 2) {
-            values = values.filter(value => {
-              return [
-                !twoNumbersInRow.includes(value),
-                !twoNumbersInCol.includes(value),
-                !twoNumbersInGroup.includes(value),
-              ].every(v => v);
-            })
-          }
-          if (values.length === 0) {
-            wrong = true;
-          }
-          item.values = values;
-          item.value = values.join(',');
-        }
-      });
-    });
-    if (wrong) {
-      alert('wrong');
-    } else {
-      this.setState({ map });
-      this.recordCurrentMap();
-    }
   }
 
   removeValue = (i: number, j: number, value: number) => {
@@ -420,7 +450,7 @@ export class ShuduMap extends Component<IProps, IState> {
           <button onClick={ this.setInitialValue }>Set Initial State</button>
           <button onClick={ this.fillNumbers }>Fill Numbers</button>
           <button onClick={ this.quickInit }>Quick Init</button>
-          <button onClick={ this.check }>Check</button>
+          <button onClick={ this.onCheckClick }>Check</button>
           <button onClick={ this.goBack }>Back</button>
         </div>
       </>
