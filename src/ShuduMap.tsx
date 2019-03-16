@@ -3,18 +3,9 @@ import './ShuduMap.scss';
 import cloneDeep from 'lodash/cloneDeep';
 import isEqual from 'lodash/isEqual';
 import uniqWith from 'lodash/uniqWith';
-
-interface Item {
-  value: any;
-  values: number[];
-  editable?: boolean; // 是否固定, 不可修改
-  group: number; // 所属九宫格
-}
-
-interface ICheckResult {
-  wrong?: boolean;
-  same?: boolean;
-}
+import uniq from 'lodash/uniq';
+import { Item, ShuduLevel, ICheckResult } from './interfaces';
+import { setInitialValueFns } from './set-initial-value-fns';
 
 interface IState {
   map: Item[][];
@@ -25,15 +16,36 @@ interface IState {
   existTwoNumbersInRow: number[][];
   existTwoNumbersInCol: number[][];
   existTwoNumbersInGroup: number[][];
+  selectedLevel: ShuduLevel; // 数独难度等级
 }
 
 interface IProps {
 
 }
 
+/**
+ * 术语说明:
+ * N元值: 一行/列/九宫格中, N个小格都含有且是同样的N个值, 例如当前行中两个小格的值都为 [1, 2], 则[1, 2]为二元值, 其他小格中不能有1或2; 再如 当前列中有三个小格都含有[3, 6, 9], 则[3, 6, 9]是当前列的三元值, 当前列的其他小格中不应该含有3/6/9;
+ *
+ * 九宫格: 数独的整个面板被分成九个3x3的区域, 每个区域叫做一个九宫格;
+ */
 export class ShuduMap extends Component<IProps, IState> {
   constructor(props: any) {
     super(props);
+    this.state = {
+      map: this.getClearMap(),
+      records: [],
+      existNumbersInColumn: new Array(9).fill(null).map(() => []),
+      existNumbersInRow: new Array(9).fill(null).map(() => []),
+      existTwoNumbersInRow: new Array(9).fill(null).map(() => []),
+      existTwoNumbersInCol: new Array(9).fill(null).map(() => []),
+      existTwoNumbersInGroup: new Array(9).fill(null).map(() => []),
+      existNumbersInGroup: new Array(9).fill(null).map(() => []),
+      selectedLevel: 2,
+    };
+  }
+
+  getClearMap() {
     const map = new Array(9).fill(null).map(item => new Array(9).fill(null));
     map.forEach((arr, i) => {
       arr.forEach((item, j) => {
@@ -65,36 +77,26 @@ export class ShuduMap extends Component<IProps, IState> {
         }
 
         arr[j] = {
-          value: '',
           editable: true,
           group: groupIndex,
           values: [],
         };
       });
     });
-    const existNumbersInGroup = [];
-    for (let i = 0; i < 9; i++) {
-      existNumbersInGroup[i] = [];
-    }
-    this.state = {
-      map,
+    return map;
+  }
+
+  resetGame(cb: () => any) {
+    this.setState({
+      map: this.getClearMap(),
       records: [],
       existNumbersInColumn: new Array(9).fill(null).map(() => []),
       existNumbersInRow: new Array(9).fill(null).map(() => []),
       existTwoNumbersInRow: new Array(9).fill(null).map(() => []),
       existTwoNumbersInCol: new Array(9).fill(null).map(() => []),
       existTwoNumbersInGroup: new Array(9).fill(null).map(() => []),
-      existNumbersInGroup,
-    };
-  }
-
-  onNumberChange = (i: number, j: number, e: any) => {
-    const map = this.state.map;
-    const item = map[i][j];
-    item.value = e.target.value;
-    item.values = item.value.split(',').map((n: string) => +n);
-    this.setState({ map });
-    this.recordCurrentMap();
+      existNumbersInGroup: new Array(9).fill(null).map(() => []),
+    }, cb);
   }
 
   setAsInitialState = () => {
@@ -108,45 +110,9 @@ export class ShuduMap extends Component<IProps, IState> {
     this.setState({ map });
   }
 
-  setInitialValue = () => {
+  setInitialValueOfLevel = (level: ShuduLevel) => {
     const { map } = this.state;
-    map[0][0].values = [3];
-    map[0][3].values = [6];
-    map[0][6].values = [5];
-    map[0][8].values = [4];
-
-    map[1][1].values = [4];
-    map[1][3].values = [7];
-    map[1][4].values = [1];
-    map[1][7].values = [6];
-
-    map[2][0].values = [5];
-
-    map[3][4].values = [5];
-    map[3][7].values = [8];
-    map[3][8].values = [9];
-
-    map[4][1].values = [8];
-    map[4][3].values = [1];
-    map[4][4].values = [3];
-    map[4][5].values = [6];
-    map[4][7].values = [4];
-
-    map[5][0].values = [6];
-    map[5][1].values = [2];
-    map[5][4].values = [7];
-
-    map[6][8].values = [5];
-
-    map[7][1].values = [5];
-    map[7][4].values = [6];
-    map[7][5].values = [9];
-    map[7][7].values = [7];
-
-    map[8][0].values = [4];
-    map[8][2].values = [8];
-    map[8][5].values = [1];
-    map[8][8].values = [6];
+    (setInitialValueFns as any)[level](map);
     this.setAsInitialState();
   }
 
@@ -156,7 +122,6 @@ export class ShuduMap extends Component<IProps, IState> {
       row.forEach((item) => {
         if (item.editable) {
           item.values = [1, 2, 3, 4, 5, 6, 7, 8, 9];
-          item.value = item.values.join(',');
         }
       });
     });
@@ -164,33 +129,25 @@ export class ShuduMap extends Component<IProps, IState> {
   }
 
   /**
-   * 该元素含有n个值, 且数组中含有n个和该元素相同的元素
+   * 当前数组中是否含有两个或以上相同的元素
    */
-  nItemsHasNValues = (group: Item[], n: number): number[] => {
-    let items = group.filter(item => item.values.length === n);
-    if (items.length >= n) {
-      items = items
-        .sort((a: Item, b: Item) => {
-          return a.values.join('') > b.values.join('') ? 1 : -1;
-        })
-        .filter(this.hasSameItem);
-      items = uniqWith(items, isEqual);
-      return items.reduce((result: number[], item: Item) => {
-        return [...result, ...item.values];
-      }, []);
-    }
-    return [];
-  }
-
   hasSameItem = (item: Item, index: number, arr: Item[]): boolean => {
     return (index < arr.length - 1) && isEqual(item, arr[index + 1]);
   }
 
+  /**
+   * 获取第 i 行
+   * @param i
+   */
   getRow(i: number): Item[] {
     const { map } = this.state;
     return map[i];
   }
 
+  /**
+   * 获取第 i 列
+   * @param i
+   */
   getCol(i: number): Item[] {
     const { map } = this.state;
     const result: Item[] = [];
@@ -200,6 +157,10 @@ export class ShuduMap extends Component<IProps, IState> {
     return result;
   }
 
+  /**
+   * 获取第i格九宫格
+   * @param i
+   */
   getGroup(i: number): Item[] {
     const { map } = this.state;
     const rowStart: number = Math.floor(i / 3) * 3;
@@ -209,14 +170,25 @@ export class ShuduMap extends Component<IProps, IState> {
       map[rowStart + 1][colStart], map[rowStart + 1][colStart + 1], map[rowStart + 1][colStart + 2],
       map[rowStart + 2][colStart], map[rowStart + 2][colStart + 1], map[rowStart + 2][colStart + 2],
     ];
-
   }
 
+  setInitialValue = () => {
+    this.resetGame(() => {
+      this.setInitialValueOfLevel(this.state.selectedLevel);
+    });
+  }
+
+  /**
+   * 快速初始化数独面板, 填入预设的数字及所有可能的答案
+   */
   quickInit = () => {
     this.setInitialValue();
     this.fillNumbers();
   }
 
+  /**
+   * 将数独面板重置到上一步的状态
+   */
   goBack = () => {
     const { records } = this.state;
     records.shift();
@@ -230,7 +202,7 @@ export class ShuduMap extends Component<IProps, IState> {
   /**
    * 记录当前所有填写的值
    * 如果当前填写的值和上一次一样, 则不进行记录
-   * return: 是否是相同记录
+   * return: 是否和上一步是相同记录
   */
   recordCurrentMap = (): boolean => {
     const { map, records } = this.state;
@@ -252,7 +224,6 @@ export class ShuduMap extends Component<IProps, IState> {
     map.forEach((row, rowIndex) => {
       row.forEach((item, colIndex) => {
         const record = recordMap[rowIndex][colIndex];
-        item.value = record.value;
         item.values = record.values;
       });
     });
@@ -268,6 +239,8 @@ export class ShuduMap extends Component<IProps, IState> {
     const checkResult: ICheckResult = {};
     this.findRowColExistNumbers();
     this.findGroupExistNumbers();
+
+    let wrong = false;
     const {
       map,
       existNumbersInRow,
@@ -277,8 +250,16 @@ export class ShuduMap extends Component<IProps, IState> {
       existTwoNumbersInCol,
       existTwoNumbersInGroup,
     } = this.state;
+    for (let i = 0; i < 9; i++) {
+      if ([
+        uniq(existNumbersInRow[i]).length !== existNumbersInRow[i].length,
+        uniq(existNumbersInColumn[i]).length !== existNumbersInColumn[i].length,
+        uniq(existNumbersInGroup[i]).length !== existNumbersInGroup[i].length,
+      ].some(v => v)) {
+        wrong = true;
+      }
+    }
 
-    let wrong = false;
     map.forEach((row, rowIndex) => {
       row.forEach((item, colIndex) => {
         if (item.editable && item.values.length > 1) {
@@ -294,23 +275,39 @@ export class ShuduMap extends Component<IProps, IState> {
             ].every(v => v);
           });
 
-          // 找出每行/每列/每九宫格中, 两个位置中含有两对相同的值, 如某行内有两个位置分别为 [1, 2], [1, 2] 则该行中其他位置的值不可能是1或2
+          // 找出每行/每列/每九宫格中的二元值
           const twoNumbersInRow = existTwoNumbersInRow[rowIndex];
           const twoNumbersInCol = existTwoNumbersInCol[colIndex];
           const twoNumbersInGroup = existTwoNumbersInGroup[item.group];
-          // 不允许元素中出现这种数字
+          // 不允许小格中出现二元值
           const twoNumbersForbid = [...twoNumbersInRow, ...twoNumbersInCol, ...twoNumbersInGroup];
 
+          const rowUniqValue = this.getUniqValueOfCollection(this.getRow(rowIndex), item);
+          const colUniqValue = this.getUniqValueOfCollection(this.getCol(colIndex), item);
+          const groupUniqValue = this.getUniqValueOfCollection(this.getGroup(item.group), item);
+          const uniqOne = [rowUniqValue, colUniqValue, groupUniqValue].find(val => val !== undefined);
+
+          // 如果小格中有一个其他格都没有的数, 那么小格的结果就应该是这个数
+          if (uniqOne !== undefined) {
+            values = [uniqOne];
+          }
           if (values.length > 2) {
             values = values.filter(value => {
               return !twoNumbersForbid.includes(value);
             });
+          } else if (this.lengthIs2(values)) {
+            values = this.getNotIncludeOne(values, twoNumbersInRow);
+            if (this.lengthIs2(values)) {
+              values = this.getNotIncludeOne(values, twoNumbersInCol);
+            }
+            if (this.lengthIs2(values)) {
+              values = this.getNotIncludeOne(values, twoNumbersInRow);
+            }
           }
           if (values.length === 0) {
             wrong = true;
           }
           item.values = values;
-          item.value = values.join(',');
         }
       });
     });
@@ -322,6 +319,40 @@ export class ShuduMap extends Component<IProps, IState> {
       checkResult.same = this.recordCurrentMap();
     }
     return checkResult;
+  }
+
+  /**
+   * 获取当前小格含有且行/列/九宫格中其他小格都不含有的数值(结果只可能是一个或没有)
+   * @param collection 当前行/列/九宫格
+   * @param item 当前小格
+   */
+  getUniqValueOfCollection(collection: Item[], item: Item) {
+    const collectionWithoutItem = collection.filter( it => it !== item);
+    return item.values.find(value => {
+      return collectionWithoutItem.every((collItem: Item) => {
+        return !collItem.values.includes(value);
+      });
+    });
+  }
+
+  lengthIs2 = (values: number[]): values is [number, number] => {
+    return values.length === 2;
+  }
+
+  /**
+   * 当前小格中有两个值, 切其中一个值在属于二元值, 那么当前小格的最终值为另一个值
+   * @param values 当前小格中的值
+   * @param numbers 当前行/列/九宫格中收集到的二元值
+   */
+  getNotIncludeOne(values: [number, number], numbers: number[]): number[] {
+    const [a, b] = values;
+    if (numbers.includes(a) && !numbers.includes(b)) {
+      return [b];
+    }
+    if (numbers.includes(b) && !numbers.includes(a)) {
+      return [a];
+    }
+    return values;
   }
 
   onCheckClick = () => {
@@ -349,16 +380,10 @@ export class ShuduMap extends Component<IProps, IState> {
       const row = this.getRow(i);
       const col = this.getCol(i);
 
-      const numbersRow = row
-        .filter((item: Item) => item.values.length === 1)
-        .map((item: Item) => item.values[0]);
-      existNumbersInRow[i] = numbersRow;
+      existNumbersInRow[i] = this.nItemsHasNValues(row, 1);
       existTwoNumbersInRow[i] = this.nItemsHasNValues(row, 2);
 
-      const numbersCol = col
-        .filter((item: Item) => item.values.length === 1)
-        .map((item: Item) => item.values[0]);
-      existNumbersInColumn[i] = numbersCol;
+      existNumbersInColumn[i] = this.nItemsHasNValues(col, 1);
       existTwoNumbersInCol[i] = this.nItemsHasNValues(col, 2);
     }
 
@@ -371,7 +396,7 @@ export class ShuduMap extends Component<IProps, IState> {
     });
   }
 
-    /**
+  /**
    * 查询每个九宫格中作为已知条件的数字
    */
   findGroupExistNumbers = () => {
@@ -392,6 +417,33 @@ export class ShuduMap extends Component<IProps, IState> {
     this.setState({ map, existNumbersInGroup });
   }
 
+    /**
+   * 找出当前行/列/九宫格中的N元值
+   */
+  nItemsHasNValues = (collection: Item[], n: number): number[] => {
+    if (n === 1) {
+      return collection
+        .filter(item => item.values.length === 1)
+        .map(item => item.values[0]);
+    }
+    let items = collection.filter(item => item.values.length === n);
+    if (items.length >= n) {
+      items = items
+        .sort((a: Item, b: Item) => {
+          return a.values.join('') > b.values.join('') ? 1 : -1;
+        })
+        .filter(this.hasSameItem);
+      items = uniqWith(items, isEqual);
+      return items.reduce((result: number[], item: Item) => {
+        return [...result, ...item.values];
+      }, []);
+    }
+    return [];
+  }
+
+  /**
+   * 删除map[i][j]中值为value的数字
+   */
   removeValue = (i: number, j: number, value: number) => {
     const { map } = this.state;
     const item = map[i][j];
@@ -400,59 +452,79 @@ export class ShuduMap extends Component<IProps, IState> {
   }
 
   renderTable() {
-    const map = this.state.map;
     return (
       <table className="shudu-map">
         <tbody>
-          {map.map((arr, i) => {
-            return (
-              <tr key={i}>
-                {arr.map((item, j) => {
-                  let ele: any;
-                  if (!item.editable) {
-                    ele = (<span className="is-set">{item.values[0]}</span>)
-                  } else {
-                    ele = (
-                      <span className="btns">
-                        {item.values.map((value, index) => {
-                          return (
-                            <button
-                              key={index}
-                              className="number-btn"
-                              onClick={ () => this.removeValue(i, j, value) }
-                            >{value}</button>
-                          )
-                        })}
-                      </span>
-                    );
-                  }
-                  return (
-                    <td key={j}>
-                      <span className="group-index">{item.group}</span>
-                      {ele}
-                    </td>
-                  );
-                })}
-              </tr>
-            );
-          })}
+          {this.state.map.map((arr, i) => (
+            <tr key={i}>
+              {arr.map((item, j) => (
+                <td key={j}>
+                  <span className="group-index">{item.group}</span>
+                  {this.renderTdBtns(item, i, j)}
+                </td>
+              ))}
+            </tr>
+          ))}
         </tbody>
       </table>
     );
   }
 
+  renderTdBtns(item: Item, i: number, j: number) {
+    return item.editable ? (
+      <span className="btns">
+        {item.values.map((value, index) => (
+          <button
+            key={index}
+            className="number-btn"
+            onClick={ () => this.removeValue(i, j, value) }
+          >{value}</button>
+        ))}
+      </span>
+    ) : (
+      <span className="is-set">{item.values[0]}</span>
+    );
+  }
+
+  selectLevel = (e: any) => {
+    this.setState({ selectedLevel: e.target.value });
+  }
+
+  renderOperations() {
+    const options: { name: string; value: ShuduLevel; disabled: boolean; }[] = [
+      { name: '入门级', value: 0, disabled: true },
+      { name: '初级', value: 1, disabled: true },
+      { name: '中级', value: 2, disabled: false },
+      { name: '高级', value: 3, disabled: true },
+      { name: '骨灰级', value: 4, disabled: false },
+    ];
+
+    const { selectedLevel } = this.state;
+    return (
+      <div className="operations">
+        <select value={ selectedLevel } onChange={ this.selectLevel }>
+          {options.map((option) => (
+            <option
+              key={ option.value }
+              value={ option.value }
+              disabled={ option.disabled }
+            >{ option.name }</option>
+          ))}
+        </select>
+        <button className="btn" onClick={ this.setInitialValue }>Set Initial State</button>
+        <button className="btn" onClick={ this.fillNumbers }>Fill Numbers</button>
+        <button className="btn" onClick={ this.quickInit }>Quick Init</button>
+        <button className="btn" onClick={ this.onCheckClick }>Check</button>
+        <button className="btn" onClick={ this.goBack }>Back</button>
+      </div>
+    );
+  }
+
   render() {
-    const table = this.renderTable();
     return (
       <>
-        {table}
-        <div className="operations">
-          <button className="btn" onClick={ this.setInitialValue }>Set Initial State</button>
-          <button className="btn" onClick={ this.fillNumbers }>Fill Numbers</button>
-          <button className="btn" onClick={ this.quickInit }>Quick Init</button>
-          <button className="btn" onClick={ this.onCheckClick }>Check</button>
-          <button className="btn" onClick={ this.goBack }>Back</button>
-        </div>
+        {this.renderTable()}
+        {this.renderOperations()}
       </>
     );
   }
