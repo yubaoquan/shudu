@@ -1,5 +1,4 @@
 import React, { Component } from 'react';
-import logo from './logo.svg';
 import './App.css';
 import { ShuduMap } from './ShuduMap';
 
@@ -8,7 +7,6 @@ class App extends Component {
     return (
       <div className="App">
         <ShuduMap />
-
       </div>
     );
   }
