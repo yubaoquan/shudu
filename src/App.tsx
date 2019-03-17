@@ -1,15 +1,13 @@
-import React, { Component } from 'react';
+import React from 'react';
 import './App.css';
-import { ShuduMap } from './ShuduMap';
+import { ShuduMap } from './ShuduHooks';
 
-class App extends Component {
-  render() {
-    return (
-      <div className="App">
-        <ShuduMap />
-      </div>
-    );
-  }
+function App() {
+  return (
+    <div className="App">
+      <ShuduMap />
+    </div>
+  );
 }
 
 export default App;

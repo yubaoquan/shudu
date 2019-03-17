@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "name": "shudu",
+  "builds": [
+    { "src": "build/static/js/*.js", "use": "@now/node" },
+    { "src": "build/index.html", "use": "@now/static" }
+  ]
+}
